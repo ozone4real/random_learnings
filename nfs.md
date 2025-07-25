@@ -44,7 +44,7 @@ The `/etc/exports` is used to configure directories on the server that should be
   /srv/mounts *(rw,sync,no_subtree_check,no_root_squash)
   ```
 
-Common options and their meaning:
+### Common options and their meaning:
 
 - rw: allow read and write operations on the directory.
 - sync (default): Reply to requests only after file changes have been flushed to disk.
@@ -93,5 +93,60 @@ NFS clients, where you might want all requests appear to be from one user.
     ```
     sudo netstat -tulpn | egrep 'rpc.mountd|2049|111'
     ```
+7. Remember to restart the nfs server/re/export the FS with `sudo systemctl restart nfs-kernel-server` or `export fs -a`. 
 
 ### NFS Client
+The client is responsible for translating local file operations into NFS requests and sending them to the server via RPCs.
+
+#### Mounting NFS on the client.
+File systems (including NFS) can be mounted manually using the [mount(8)](https://man7.org/linux/man-pages/man8/mount.8.html) command. The mount command for NFS takes this form:
+
+```sh
+mount -t nfs -o `...list of nfs options` server_host:server_directory source_directory
+```
+
+Alternatively, the [mount_nfs(8)](https://man7.org/linux/man-pages/man8/mount.8.html), which is specific to nfs could also be used like so:
+
+```sh
+mount_nfs 125.170.192.216:/srv/mounts /home/mnt -rw -o resvport
+```
+
+The problem with mounting manually as above is that the mount will not persist across reboots. To make the mount persistent, you can add an entry to the `/etc/fstab` file. The entry format is:
+
+```sh
+server_host:server_directory source_directory nfs options
+```
+
+Example:
+
+```sh
+125.170.192.216:/srv/mounts /home/mnt nfs rw,resvport 0 0
+```
+
+After adding the entry, you can mount all file systems in `/etc/fstab` using the command:
+
+```sh
+sudo automount -c
+```
+
+You can unmount file systems using the `umount` command:
+
+```sh
+sudo umount /home/mnt
+```
+
+### NFS Client Options
+
+When mounting an NFS file system, you can specify various options to control the behavior of the mount. These options can be specified in the `mount` command or in the `/etc/fstab` file.
+
+#### NFS Client Options
+- rw: Allow read and write operations on the mounted file system.
+- ro: Mount the file system as read-only.
+- resvport: Use a privileged port (< 1024) for the NFS connection. This is necessary when the server is configured to only allow connections from privileged ports, i.e. when the `secure` option is set in the `/etc/exports` file.
+- nolock: Disable file locking. This is useful when the NFS server does not support file locking or when you want to avoid potential locking issues.
+- lock: Enable file locking. This is the default behavior. This allows multiple clients to safely access the same files concurrently.
+- soft: Allow the NFS client to time out and return an error if the server does not respond within a certain time. This is useful for applications that can tolerate temporary unavailability of the NFS server.
+- hard: The default behavior. The NFS client will retry indefinitely until the server responds.
+- timeo=n: Set the timeout value for NFS requests to n tenths of a second. This controls how long the client will wait for a response from the server before retrying.
+- retrans=n: Set the number of times the client will retry a request before giving up.
+- proto=tcp|udp: Specify the transport protocol to use for NFS communication. The default is TCP, but UDP can be used for better performance in some cases, althought it is strongly discouraged due to possible data corruption. UDP isn't supported in NFSv4.
